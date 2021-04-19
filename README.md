@@ -1,5 +1,6 @@
-# Light & Geometry
-## Raytracing using C++ Templates
+## Light & Geometry
+
+### Raytracing using C++ Templates
 
 Example Raytracing application, which supports:
 * Multi-Sampling Anti-Aliasing
