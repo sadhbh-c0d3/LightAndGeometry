@@ -1,6 +1,9 @@
 #ifndef INCLUDED_CAMERA_H
 #define INCLUDED_CAMERA_H
 
+#include <algorithm>
+
+
 template<class _NumericType>
     class Camera
     {
@@ -108,61 +111,113 @@ template<class _NumericType>
             return c / 16;
         }
 
+        struct TraceLineInfo
+        {
+            int lineNo;
+            int ynEnd;
+            int pitch;
+            NumericType yDelta;
+            RayType ray;
+            char* ynPixels;
+        };
+
         template<class PixelType>
-            void raytrace(int threadNum, int numThreads, int &stop, SceneGraphType &sceneGraph, TargetBuffer<PixelType> &target)
+            void calculateTraceLines(int threadNum, int numThreads, TargetBuffer<PixelType>& target, std::vector<TraceLineInfo>& traceLines)
             {
-                const int pitch = target.pitch;
-                const int xnEnd = target.width;
-                const int ynEnd = target.height;
+                TraceLineInfo traceLine{};
 
-                const NumericType xDelta = (mFrustum.mRight - mFrustum.mLeft) / NumericType(xnEnd - 1);
-                const NumericType yDelta = (mFrustum.mTop - mFrustum.mBottom) / NumericType(ynEnd - 1);
+                traceLine.ynEnd = target.height;
 
-                RayType ray;
-                ray.direction[1] = mFrustum.mBottom;
-                ray.direction[2] = mFrustum.mNear;
+                traceLine.pitch = target.pitch;
 
-                char *ynPixels = target.pixels;
+                traceLine.yDelta = (mFrustum.mTop - mFrustum.mBottom) / NumericType(traceLine.ynEnd - 1);
 
-                int linesToDo = ynEnd / numThreads;
-                int lines = ynEnd - (linesToDo * numThreads);
+                traceLine.ray.direction[0] = mFrustum.mLeft;
+                traceLine.ray.direction[1] = mFrustum.mBottom;
+                traceLine.ray.direction[2] = mFrustum.mNear;
+
+                traceLine.ynPixels = target.pixels;
+
+                int linesToDo = traceLine.ynEnd / numThreads;
+                int lines = traceLine.ynEnd - (linesToDo * numThreads);
                 if (threadNum < lines) {
                     ++linesToDo;
                 }
 
-                for (int n = 0; n < threadNum; ++n)
-                {
-                    ray.direction[1] += yDelta;
-                    ynPixels += pitch;
-                }
+                traceLine.ray.direction[1] += threadNum * traceLine.yDelta;
+                traceLine.ynPixels += threadNum * traceLine.pitch;
 
-                for (int lineNo = 0; lineNo < linesToDo && !stop; ++lineNo)
+                for (int lineNo = 0; lineNo < linesToDo; ++lineNo)
                 {
-                    ray.direction[0] = mFrustum.mLeft;
-                    char *xnPixels = ynPixels;
+                    traceLine.lineNo = lineNo;
+
+                    traceLines.push_back(traceLine);
+
+                    traceLine.ray.direction[1] += numThreads * traceLine.yDelta;
+                    traceLine.ynPixels += numThreads * traceLine.pitch;
+                }
+            }
+
+        void doReorderTraceLines(std::vector<TraceLineInfo>& traceLines, int start, int step)
+        {
+            const int count = (traceLines.size() - start) / step;
+
+            for (int i = 0; i < count; ++i)
+            {
+                std::swap(traceLines[start + i], traceLines[start + i * step]);
+            }
+
+            if (1 < step)
+            {
+                doReorderTraceLines(traceLines, count, step / 2);
+            }
+        }
+
+        void reorderTraceLines(std::vector<TraceLineInfo>& traceLines)
+        {
+            doReorderTraceLines(traceLines, 0, 4);
+        }
+
+        template<class PixelType>
+            void raytraceLines(
+                    SceneGraphType &sceneGraph,
+                    TargetBuffer<PixelType>& target,
+                    NumericType brightness,
+                    bool disableFSAA,
+                    std::vector<TraceLineInfo> &traceLines, int &stop)
+            {
+                const int xnEnd = target.width;
+                const NumericType xDelta = (mFrustum.mRight - mFrustum.mLeft) / NumericType(xnEnd - 1);
+
+                std::vector<TraceLineInfo>::const_iterator iter = traceLines.begin();
+                std::vector<TraceLineInfo>::const_iterator end = traceLines.end();
+
+                for (; iter != end && !stop; ++iter)
+                {
+                    const NumericType yDelta = (*iter).yDelta;
+
+                    RayType ray = (*iter).ray;
+                    char* xnPixels = (*iter).ynPixels;
 
                     for (int xn = 0; xn != xnEnd; ++xn)
                     {
                         ColorType c;
 
-                        if (mFSAA)
+                        if (mFSAA && !disableFSAA)
                         {
                             c = doFSAA(sceneGraph, ray, xDelta, yDelta);
                         }
                         else {
                             c = raytrace(sceneGraph, ray);
+                        
                         }
+
+                        c *= brightness;
 
                         PixelType::putPixel(xnPixels, c);
 
                         ray.direction[0] += xDelta;
                         xnPixels += PixelType::BytesPerPel;
-                    }
-
-                    for (int n = 0; n < numThreads; ++n)
-                    {
-                        ray.direction[1] += yDelta;
-                        ynPixels += pitch;
                     }
                 }
             }

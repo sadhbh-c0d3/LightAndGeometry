@@ -16,7 +16,7 @@
 class Raytracer : public App
 {
 public:
-    Raytracer();
+    Raytracer(int iNumThreads, int iTextureSize, int iManifoldDetail);
 
     ~Raytracer();
 
@@ -44,6 +44,8 @@ private:
     TargetBuffer<PixelRGBA32> targetBuffer;
 
     GLuint texture;
+    const int numThreads;
+    const int textureSize;
     int windowWidth;
     int windowHeight;
 

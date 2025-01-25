@@ -119,7 +119,7 @@ private:
             1,
             PFD_DRAW_TO_WINDOW|PFD_SUPPORT_OPENGL|PFD_DOUBLEBUFFER,
             PFD_TYPE_RGBA,
-            bitsPerPel,
+            (BYTE)bitsPerPel,
             0,0,0,0,0,0,0,0,0,0,0,0,0, // useles parameters
             16,
             0,0,PFD_MAIN_PLANE,0,0,0,0
@@ -275,26 +275,35 @@ private:
         case WM_MBUTTONDOWN: ++buttonNo;
         case WM_RBUTTONDOWN: ++buttonNo;
         case WM_LBUTTONDOWN:
-            ThisFromWindow(hWnd).buttonDown(buttonNo, wParam);
+            ThisFromWindow(hWnd).buttonDown(buttonNo, (int)wParam);
             break;
 
         case WM_MBUTTONUP: ++buttonNo;
         case WM_RBUTTONUP: ++buttonNo;
         case WM_LBUTTONUP:
-            ThisFromWindow(hWnd).buttonDown(buttonNo, wParam);
+            ThisFromWindow(hWnd).buttonDown(buttonNo, (int)wParam);
             break;
 
         case WM_KEYDOWN:
-            ThisFromWindow(hWnd).keyDown(wParam);
+            ThisFromWindow(hWnd).keyDown((int)wParam);
             break;
 
         case WM_KEYUP:
-            ThisFromWindow(hWnd).keyUp(wParam);
+            ThisFromWindow(hWnd).keyUp((int)wParam);
             break;
         }
         return DefWindowProc(hWnd, msg, wParam, lParam);
     }
 };
+
+int GetNumberOfThreads()
+{
+    SYSTEM_INFO sys_info{};
+
+    GetSystemInfo(&sys_info);
+
+    return sys_info.dwNumberOfProcessors;
+}
 
 int WINAPI WinMain(
         HINSTANCE hInstance,
@@ -302,8 +311,20 @@ int WINAPI WinMain(
         LPSTR lpCmdLine,
         int nShowCmd)
 {
-    Raytracer app;
-    WinApp winApp(app, hInstance, _T("Raytracer"), 1280, 720);
+#ifdef _DEBUG
+    const int numThreads = 1;
+    const int manifoldDetail = 3;
+    const int textureSize = 256;
+    const int windowSize[] = { 640, 480 };
+#else
+    const int numThreads = GetNumberOfThreads();
+    const int manifoldDetail = 7;
+    const int textureSize = 0;
+    const int windowSize[] = { 1920, 1080 };
+#endif
+
+    Raytracer app{numThreads, textureSize, manifoldDetail};
+    WinApp winApp(app, hInstance, _T("Raytracer"), windowSize[0], windowSize[1]);
 
     try {
         winApp.run();

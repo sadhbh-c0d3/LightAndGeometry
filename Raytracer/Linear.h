@@ -407,7 +407,7 @@ namespace GAL_imp {
                     return *this;
                 }
 
-            mutable T &x;
+            T &x;
             int n;
         };
 
@@ -427,7 +427,7 @@ namespace GAL_imp {
                 return Transposed<I,E,T>(x,n);
             }
 
-            mutable T &x;
+            T &x;
         };
 
 

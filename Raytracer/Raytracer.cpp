@@ -3,17 +3,31 @@
 #include "Intersect.h"
 #include "SceneGraph.h"
 #include "Thread.h"
-
+#include <algorithm>
 
 struct RaytraceThread : public Thread
 {
 public:
+
     int run()
     {
         Sleep(1);
         Console::Out() << "Raytracing started...";
 
-        camera.raytrace(threadNo, numThreads, stop, scene, targetBuffer);
+        std::vector<Camera3d::TraceLineInfo> traceLines;
+
+        camera.calculateTraceLines(threadNo, numThreads, targetBuffer, traceLines);
+        
+        if (camera.isFSAA())
+        {
+            std::vector<Camera3d::TraceLineInfo> traceLinesReordered{ traceLines };
+
+            camera.reorderTraceLines(traceLinesReordered);
+
+            camera.raytraceLines(scene, targetBuffer, 0.8, true, traceLinesReordered, stop);
+        }
+
+        camera.raytraceLines(scene, targetBuffer, 1.0, false, traceLines, stop);
 
         Console::Out() << "Raytracing finished...";
         return 0;
@@ -80,14 +94,16 @@ double manifoldFunction(double x, double y)
     return -0.5 * x * x - 0.75 * y * y;
 }
 
-void manifold(Mesh<Vertex3d> &mesh)
+void manifold(Mesh<Vertex3d> &mesh, const int N)
 {
-    const int N = 7;
     const int M = N - 1;
     const double L = ((double)N) / 2.0;
 
-    Vertex3d vertices[N * N];
-    int indices[M * M * 6];
+    std::vector<Vertex3d> vertices{}; 
+    std::vector<int> indices{};
+    
+    vertices.resize(N * N);
+    indices.resize(M* M * 6);
 
     int index = 0;
 
@@ -138,15 +154,13 @@ void manifold(Mesh<Vertex3d> &mesh)
         }
     }
 
-    mesh.addVertices(vertices, sizeof(vertices) / sizeof(GAL::P3d));
-    mesh.addIndices(indices, sizeof(indices) / sizeof(int));
+    mesh.addVertices(vertices.data(), vertices.size());
+    mesh.addIndices(indices.data(), indices.size());
 }
 
 
-Raytracer::Raytracer(): texture(0)
+Raytracer::Raytracer(int iNumThreads, int iTextureSize, int iManifoldDetail): texture(0), textureSize(iTextureSize), numThreads(iNumThreads)
 {
-    prepareTargetBuffer(128,128);
-
     std::shared_ptr<Clump3d> clump(new Clump3d);
     
     //
@@ -170,7 +184,7 @@ Raytracer::Raytracer(): texture(0)
     //
 
     std::shared_ptr<MeshGeometry<Vertex3d> > geom3(new MeshGeometry<Vertex3d>());
-    manifold(geom3->getMesh());
+    manifold(geom3->getMesh(), iManifoldDetail);
     geom3->meshChanged();
     geom3->setColor(GAL::P4d(1.0, 1.0, 0.0, 1.0));
     geom3->setReflective(true);
@@ -238,8 +252,8 @@ Raytracer::Raytracer(): texture(0)
 
     camera.setTranslation(GAL::P3d(1,2,3));
     camera.setLocalTransform(GAL::EulerRotationX(30.0) * GAL::EulerRotationY(15.0), 0);
-    camera.setFSAA(true);
     camera.setRecursionDepth(3);
+    camera.setFSAA(true);
 }
 
 Raytracer::~Raytracer()
@@ -260,8 +274,8 @@ void Raytracer::windowSizeChanged(int width, int height)
     windowHeight = height;
 
     double aspect = height / (double)width;
-	double w = sqrt(sqrt(2.0) / (aspect * aspect + 1));
-	double h = aspect * w;
+    double w = sqrt(sqrt(2.0) / (aspect * aspect + 1));
+    double h = aspect * w;
 
     camera.getFrustum().mLeft   = -w;
     camera.getFrustum().mRight  = w;
@@ -400,12 +414,14 @@ void Raytracer::startRaytrace()
     threads.clear();
     needRedraw = false;
 
-#ifndef _DEBUG
-    prepareTargetBuffer(windowWidth, windowHeight);
-    int numThreads = 6;
-#else
-    int numThreads = 1;
-#endif
+    if (textureSize)
+    {
+        prepareTargetBuffer(textureSize, textureSize);
+    }
+    else
+    {
+        prepareTargetBuffer(windowWidth, windowHeight);
+    }
 
 
     for (int threadNo = 0; threadNo != numThreads; ++threadNo)
@@ -422,21 +438,21 @@ void Raytracer::processTick()
         startRaytrace();
     }
     
-	glClearColor(0,0,0,0);
-	glClearDepth(1);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClearColor(0,0,0,0);
+    glClearDepth(1);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     if (0 == texture)
     {
         glGenTextures(1, &texture);
     }
 
-	glBindTexture(GL_TEXTURE_2D, texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
 
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, targetBuffer.width, targetBuffer.height, 0,
         GL_RGBA, GL_UNSIGNED_BYTE, targetBuffer.pixels);
