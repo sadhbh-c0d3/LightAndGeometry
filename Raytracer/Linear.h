@@ -1,5 +1,5 @@
-#ifndef __INLCUDED_GAL_BASE_H__
-#define __INLCUDED_GAL_BASE_H__
+#ifndef __INCLUDED_GAL_BASE_H__
+#define __INCLUDED_GAL_BASE_H__
 /* FILE GAL/Linear.h
  *
  * Defines Point< Numeric_T, int > and Matrix< Numeric_T, int >
@@ -874,5 +874,5 @@ namespace GAL {
         }
 
 };//namespace GAL
-#endif//__INLCUDED_GAL_BASE_H__
+#endif//__INCLUDED_GAL_BASE_H__
 
