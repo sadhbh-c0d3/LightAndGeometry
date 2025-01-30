@@ -2,6 +2,8 @@
 
 ### Raytracing using C++ Templates
 
+[![Watch My Video!](https://img.youtube.com/vi/52fIXmTbv_c/0.jpg)](https://www.youtube.com/watch?v=52fIXmTbv_c&list=PLAetEEjGZI7OUBYFoQvI0QcO9GKAvT1xT)
+
 Example Raytracing application, which supports:
 * Multi-Sampling Anti-Aliasing
 * Smooth Shadows
